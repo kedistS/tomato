@@ -21,16 +21,19 @@ app.add_middleware(
 )
 
 MODEL = tf.keras.models.load_model("../saved_models/model.keras", compile=False)
-CLASS_NAMES = ['Tomato_Bacterial_spot',
- 'Tomato_Early_blight',
- 'Tomato_Late_blight',
- 'Tomato_Leaf_Mold',
- 'Tomato_Septoria_leaf_spot',
- 'Tomato_Spider_mites_Two_spotted_spider_mite',
- 'Tomato__Target_Spot',
- 'Tomato__Tomato_YellowLeaf__Curl_Virus',
- 'Tomato__Tomato_mosaic_virus',
- 'Tomato_healthy']
+CLASS_NAMES = [
+    'Tomato_Bacterial_spot',
+    'Tomato_Early_blight',
+    'Tomato_Late_blight',
+    'Tomato_Leaf_Mold',
+    'Tomato_Septoria_leaf_spot',
+    'Tomato_Spider_mites_Two_spotted_spider_mite',
+    'Tomato__Target_Spot',
+    'Tomato__Tomato_YellowLeaf__Curl_Virus',
+    'Tomato__Tomato_mosaic_virus',
+    'Tomato_healthy',
+    'non_tomato'  # Add a class for non-tomato images
+]
 
 @app.get("/ping")
 async def ping():
@@ -51,9 +54,17 @@ async def predict(file: UploadFile = File(...)):
 
     predicted_class = CLASS_NAMES[np.argmax(predictions[0])]
     confidence = float(np.max(predictions[0]))
+
+    # Check if the prediction is non-tomato
+    if predicted_class == 'non_tomato':
+        message = "The uploaded image is not a tomato leaf."
+    else:
+        message = f"The uploaded image is a tomato leaf with predicted class: {predicted_class} and confidence: {confidence:.2f}%."
+
     return {
         'class': predicted_class,
-        'confidence': confidence
+        'confidence': confidence,
+        'message': message
     }
 
 if __name__ == "__main__":
