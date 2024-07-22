@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import numpy as np
@@ -6,12 +6,14 @@ from io import BytesIO
 from PIL import Image
 import tensorflow as tf
 
+
 app = FastAPI()
 
 origins = [
     "http://localhost",
     "http://localhost:3000",
 ]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -21,6 +23,8 @@ app.add_middleware(
 )
 
 MODEL = tf.keras.models.load_model("../saved_models/model.keras", compile=False)
+MODEL_L = tf.keras.models.load_model("../saved_models/leaf.keras", compile=False) 
+
 CLASS_NAMES = ['Tomato_Bacterial_spot',
  'Tomato_Early_blight',
  'Tomato_Late_blight',
@@ -38,7 +42,7 @@ async def ping():
 
 def read_file_as_image(data) -> np.ndarray:
     image = Image.open(BytesIO(data)).convert('RGB')  # Ensure image is in RGB format
-    image = image.resize((256, 256))  # Resize image
+    image = image.resize((224, 224))  # Resize image for leaf detection model
     image = np.array(image) / 255.0  # Rescale image
     return image
 
@@ -47,10 +51,22 @@ async def predict(file: UploadFile = File(...)):
     image = read_file_as_image(await file.read())
     img_batch = np.expand_dims(image, 0)
 
-    predictions = MODEL.predict(img_batch)
+    # Predict if the image contains a leaf
+    leaf_prediction = MODEL_L.predict(img_batch)
+    if leaf_prediction[0] < 0.5: 
+        raise HTTPException(status_code=400, detail="No leaf detected in the image")
 
+    
+    image = Image.open(BytesIO(await file.read())).convert('RGB')  # Ensure image is in RGB format
+    image = image.resize((256, 256))  # Resize image for disease classification model
+    image = np.array(image) / 255.0  # Rescale image
+    img_batch = np.expand_dims(image, 0)
+
+    # Predict the disease
+    predictions = MODEL.predict(img_batch)
     predicted_class = CLASS_NAMES[np.argmax(predictions[0])]
     confidence = float(np.max(predictions[0]))
+
     return {
         'class': predicted_class,
         'confidence': confidence
